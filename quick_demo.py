@@ -18,10 +18,10 @@ print(f"Using device: {device}")
 
 # Config
 BATCH_SIZE = 8
-NUM_EPOCHS = 5
-NUM_SAMPLES = 10000  # Using 10,000 images for better training
-IMG_SIZE = 256    # Smaller image size for speed
-NUM_CLASSES = 15  # Limited classes for demo
+NUM_EPOCHS = 20
+NUM_SAMPLES = 21970
+IMG_SIZE = 512
+NUM_CLASSES = 15
 
 def get_tiny_dataset(root_dir='ADE', split='train', num_samples=NUM_SAMPLES):
     """Create a tiny subset of the dataset for demo purposes."""
@@ -115,40 +115,64 @@ def train_quick_demo():
         num_workers=0
     )
     
-    # Create model
+        # Create model
     model = FCN(
         num_classes=NUM_CLASSES,
-        backbone="resnet18",
+        backbone="resnet50",
         pretrained=True
     ).to(device)
-    
+
     # Loss and optimizer
     criterion = nn.CrossEntropyLoss(ignore_index=255)
     optimizer = optim.Adam(model.parameters(), lr=0.001)
-    
+
+    # Create checkpoint directory
+    os.makedirs("checkpoints", exist_ok=True)
+
     # Training loop
     print("Starting quick demo training...")
     model.train()
+    # best_val_loss = float('inf')
+
     for epoch in range(NUM_EPOCHS):
+        model.train()
         train_loss = 0
-        
+
         for images, masks in tqdm(train_loader, desc=f"Epoch {epoch+1}/{NUM_EPOCHS}"):
             images = images.to(device)
             masks = masks.to(device)
-            
+
             # Forward pass
             outputs = model(images)
             loss = criterion(outputs, masks)
-            
+
             # Backward and optimize
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            
+
             train_loss += loss.item()
-        
-        avg_loss = train_loss / len(train_loader)
-        print(f"Epoch {epoch+1}/{NUM_EPOCHS}, Loss: {avg_loss:.4f}")
+
+        avg_train_loss = train_loss / len(train_loader)
+        print(f"Epoch {epoch+1}/{NUM_EPOCHS}, Training Loss: {avg_train_loss:.4f}")
+
+        # Save checkpoint
+        checkpoint_path = f"checkpoints/checkpoint_epoch_{epoch+1}.pth"
+        torch.save({
+            'epoch': epoch + 1,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'loss': avg_train_loss,
+            'num_classes': NUM_CLASSES,
+            'class_mapping': train_dataset.class_mapping
+        }, checkpoint_path)
+        print(f"Checkpoint saved: {checkpoint_path}")
+
+        # Optionally evaluate after each epoch (you can move validation here if preferred)
+        # and update best model
+        # if val_loss < best_val_loss:
+        #     best_val_loss = val_loss
+        #     torch.save(model.state_dict(), 'checkpoints/best_model.pth')
     
     # Save model
     checkpoint_path = 'demo_model.pth'
